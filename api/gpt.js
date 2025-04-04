@@ -1,16 +1,27 @@
+let lastRequest = 0; // poslední čas požadavku (basic rate limit)
+
 export default async function handler(req, res) {
   // Povolit CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
 
+  // Preflight request pro CORS
   if (req.method === "OPTIONS") {
-    return res.status(200).end(); // Odpověď na preflight
+    return res.status(200).end();
   }
 
+  // Povolit jen POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Použij POST metodu." });
   }
+
+  // Rate limit: 1 požadavek za 2 sekundy
+  const now = Date.now();
+  if (now - lastRequest < 2000) {
+    return res.status(429).json({ error: "Zkus to prosím za chvíli (ochrana proti přetížení)." });
+  }
+  lastRequest = now;
 
   const { query } = req.body;
   if (!query) {
@@ -38,17 +49,17 @@ export default async function handler(req, res) {
     const data = await openaiRes.json();
 
     if (!openaiRes.ok) {
-      console.error("Chyba z OpenAI:", data); // loguje do Vercel logs
+      console.error("Chyba od OpenAI:", data);
       return res.status(openaiRes.status).json({
-        error: data?.error?.message || "Neznámá chyba z OpenAI"
+        error: data?.error?.message || "Chyba z OpenAI"
       });
     }
 
     res.status(200).json({
-      answer: data?.choices?.[0]?.message?.content?.trim() || ""
+      answer: data.choices?.[0]?.message?.content?.trim() || ""
     });
   } catch (err) {
-    console.error("Chyba serveru:", err);
+    console.error("Chyba na serveru:", err);
     res.status(500).json({ error: "Chyba serveru: " + err.message });
   }
 }
